@@ -1,0 +1,245 @@
+---
+title: "Bike Share Dataset Analysis"
+author: "Isoemi"
+date: '2022-05-14'
+output:
+  html_document: default
+  pdf_document: default
+---
+
+### About the case study 
+This case study is in pursuance of the Google Data Analytics Course and is based on a bike-share company called Cyclistic. 
+
+The business problem is converting casual users to annual users: annual users pay an annual membership fee while casual users pay per ride. The results of this analysis would help the company understand how the two categories of product users (annual riders and casual riders) use Cyclistic bikes differently. The insights obtained  would be used to design a new marketing strategy that would convert casual users to annual user. 
+ 
+#### Data analysis process
+
+Collect only 2021 datasets and load them. 
+
+```{r}
+jan_data <- read.csv("Jan_2021.csv")
+feb_data <- read.csv("Feb_2021.csv")
+march_data <- read.csv("March_2021.csv")
+april_data <- read.csv("April_2021.csv")
+may_data <- read.csv("May_2021.csv")
+june_data <- read.csv("June_2021.csv") 
+july_data <- read.csv("July_2021.csv")
+aug_data <- read.csv("August_2021.csv")
+sept_data <- read.csv("Sept_2021.csv")
+oct_data <- read.csv("Oct_2021.csv")
+nov_data <- read.csv("Nov_2021.csv")
+dec_data <- read.csv("Dec_2021.csv")
+```
+Merge the datasets together to create a complete dataset.
+```{r}
+bike_share_2021 <- rbind(jan_data,feb_data,march_data,april_data,may_data,
+                         june_data,july_data,aug_data,sept_data,oct_data,
+                         nov_data,dec_data)
+```
+Familiarize with the data and clean it.
+```{r}
+head(bike_share_2021)
+```
+There are a couple of things I need to do to clean the data
+
+* remove duplicate rows from the data
+* change the format of the time columns ("started_at" and "ended_at" ) from 'character' to months and time. This would help me notice trends over a period of time.
+* separate the months & time columns that would be created. 
+* rename certain columns to make them more intuitive .
+
+####__i have installed relevant packages for the data cleaning process. They are not documented in this file.
+
+```{r}
+colnames(bike_share_2021)
+```
+
+```{r}
+names(bike_share_2021)[13] <- "member_type"
+names(bike_share_2021)[2] <- "bike_type"
+```
+remove duplicates from the table 
+```{r}
+library(dplyr)
+distinct(bike_share_2021)
+```
+There seem to be no duplicate rows: the syntax above returned the same number of rows and columns.
+
+Next, change date format from "character" to "datetime" and create a separate column for time_spent_per_ride.
+
+```{r}
+library(lubridate)
+bike_share_2021 <- bike_share_2021 %>% mutate(ride_start = ymd_hms(started_at)) %>% 
+  relocate(ride_start) %>%
+  mutate(ride_end = ymd_hms(ended_at)) %>% 
+  relocate(ride_end) %>%
+  relocate(ride_id)
+```
+
+create a separate column for months of the year and days of the week
+```{r}
+bike_share_2021 <- bike_share_2021 %>% 
+  mutate(months_of_the_year =  months(ride_start))
+```
+```{r}
+bike_share_2021 <- bike_share_2021 %>% 
+  mutate(week_day =  weekdays(ride_start))
+```
+Done cleaning! ready to start analyzing. 
+
+#### Question 1 - How long do different users spend per ride?
+answer experessed in seconds
+```{r}
+bike_share_2021 %>% group_by(member_type) %>% 
+  summarise(time_spent_per_ride = mean(ride_end - ride_start))
+```
+answer expressed in minutes
+```{r}
+avg_time_spent <- bike_share_2021 %>% 
+  group_by(member_type) %>% 
+  summarise(avg_time_spent_per_ride =  mean(minute(seconds_to_period(ride_end - ride_start))))
+```
+average time spent by the different member types every month
+```{r}
+avg_time_spent <- bike_share_2021 %>% 
+  group_by(member_type, week_day) %>% 
+  summarise(avg_time_spent_per_ride =  mean(minute(seconds_to_period(ride_end-ride_start))))
+```
+#### I'll represent this data on a graph
+
+```{r}
+install.packages("ggplot2", repos = "http://cran.us.r-project.org")
+library(ggplot2)
+avg_time_spent %>% 
+  ggplot(aes(x = week_day, y = avg_time_spent_per_ride, fill = member_type)) + geom_col(position = "dodge") + 
+  labs(x= 'Day of Week', y='Total Number of Rides', title='Average time spent per ride', fill = 'member_type') +
+  scale_y_continuous(breaks = c(5, 10, 15, 20), labels = c("5mins", "10mins", "15mins", "20mins")) +
+  scale_x_discrete(limits = c("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"))
+
+```
+At first glance, we see that casual users spend more time than annual members especially on Sundays. 
+
+
+Next, we will calculate the number of rides and see how many rides were made by the different categories during different months and during different days of the year.
+
+```{r}
+monthly_rides <- bike_share_2021 %>% 
+  group_by(member_type) %>%
+  count(months_of_the_year) %>% 
+  arrange(months_of_the_year)
+```
+
+#### I'll express this in a graph
+```{r}
+monthly_rides %>% 
+  ggplot(aes(x = months_of_the_year, y = n, fill = member_type)) + geom_col(position = "dodge") + 
+  labs(x= 'Months of the year', y='Total Number of Rides', title='Total rides per month', fill = 'member_type') +
+  scale_y_continuous(breaks = c(50000, 100000, 150000, 200000, 250000,300000,350000,400,000,450000)) + theme(axis.text.x = element_text(angle = 45)) +
+  scale_x_discrete(limits = c("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"))
+
+```
+We see that July, August, September are peak months for casual users. We also see that casual & annual users are almost non-existent in December, January and February: this might be because of the weather.
+
+
+Next, we'll analyze the data to check for bike preferrence among the different users. 
+```{r}
+preferred_bikes <- bike_share_2021 %>% 
+  group_by(member_type) %>%
+  count(bike_type)
+```
+
+## We will represent this on a graph
+
+```{r}
+bike_share_2021 %>% 
+  ggplot(aes(x=bike_type, fill = member_type)) +
+  geom_bar(position = "dodge") +
+  labs(x= 'Bike Type', y='Number of Users', title='Bike Type By Users') +
+  scale_y_continuous(breaks = c(500000, 1000000, 1500000))
+```
+Annual members are the biggest users of classic bikes. We also see that majority of casual member use classic bikes. A little % of casual users also use docked bikes.
+
+
+#### Next, we will analyze the data to check for the total demand of rides at different times during the day. This data would show the total demand for the entire year.
+```{r}
+bike_share_2021 <- bike_share_2021 %>% 
+  mutate(hours_during_the_day = hour(ride_start))
+```
+
+```{r}
+daily_demand <- bike_share_2021 %>% 
+  group_by(member_type, hours_during_the_day)  %>% 
+  dplyr::summarise(ride_start) %>%
+  as.data.frame()
+```
+```{r}
+library(dplyr)
+daily_demand_per_hour <- daily_demand %>% 
+group_by(hours_during_the_day)%>% 
+count(member_type)
+  
+```
+
+
+```{r}
+ daily_demand_per_hour%>% 
+  ggplot(aes(x = hours_during_the_day, y =n, color = member_type, group=member_type ))+
+  geom_line(position = "dodge")
+```
+
+
+#### Let's properly analyze this data on a graph
+
+```{r}
+daily_demand_per_hour%>% 
+  ggplot(aes(x = hours_during_the_day, y =n, color = member_type, group=member_type ))+
+  geom_line(position = "dodge") + 
+  labs(title = "2021 Total Demand Per Hour", x = "Hours", y = "Total rides") + 
+  scale_y_continuous(breaks = c(0, 15000, 30000, 45000, 60000, 75000, 90000, 105000, 120000,
+                                135000, 150000, 165000, 180000, 195000, 210000, 225000,
+                                240000, 255000, 270000, 285000, 300000, 315000, 330000,
+                                345000, 360000)) +
+  scale_x_continuous(breaks = c(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,
+                                18, 19, 20, 21, 22, 23, 24))
+```
+
+
+From the graph, both set of users typically demand for rides at around 5 pm. Although, annual members demand more, this time is also a peak period for casual users. This could mean work closes at 5pm and both set of users are trying to move around while avoiding traffic. 
+
+
+
+## Conclusion
+
+Based on the analysis, we note that:
+* On an average, casual users spend a longer time riding bikes; especially on Saturdays and Sundays. This could mean casual users ride bikes for exercise or leisure. 
+
+* As a follow up to the point above, we also notice that the peak periods for  demand during the year happens between 4 pm - 6 pm: this is typically the closing time of offices. This could be an indication that annual users are working class people that use our bikes to avoid after work traffic. 
+
+* Based on bike preference: both users mostly use classic bikes,  annual users never use docked bikes and a small percentage of casual users use docked bikes. 
+
+* Based on monthly usage: casual users mostly use bikes in July & August but their usage is almost non-existent from December to March. This might be because December to March is the winter season and July & August are summer periods. 
+
+
+## Suggestions
+
+Based on this analysis, here are suggestions to help us design a new marketing strategy that would convert casual users to annual users:
+
+* Since casual users seem to spend more time riding bikes, we can create a membership option that is based on time/minutes. For instance, the option can state that every month, users get a total of 20 hours for a specific amount.   
+
+* Since casual users mostly use bikes during the weekend, we can organize bike riding competitions and other events to attract them. Participation in these events would require paying for an annual plan.
+
+* We can also explore more data relating to docked bikes and casual users to see if there are marketing opportunities there.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
