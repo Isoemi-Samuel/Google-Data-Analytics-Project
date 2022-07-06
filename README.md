@@ -14,3 +14,5 @@ The business problem is converting casual riders into annual riders: annual ride
 - How do annual members and casual riders differ?
 - Why would casual riders want an annual membership?
 - How can Cyclistic use digital media to influence casual riders to become members?
+
+You can view the full details(code, packages used, and visualizations) [here](https://rpubs.com/Isoemi/914180).
